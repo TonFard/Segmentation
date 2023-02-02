@@ -5,7 +5,7 @@ from typing import Dict
 import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
-from .mobilenet_backbone import mobilenet_v3_large
+from model.src.mobilenet_backbone import mobilenet_v3_large
 
 
 class IntermediateLayerGetter(nn.ModuleDict):
