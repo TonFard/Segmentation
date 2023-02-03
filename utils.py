@@ -1,10 +1,15 @@
+import glob
 import logging
+import re
+from pathlib import Path
 import platform
 
 import numpy as np
 import pandas as pd
 import torch
+from PIL import Image
 import cv2
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 import torch.nn as nn
 import torch.utils.data
@@ -209,15 +214,70 @@ def PILtoCV2(img):
     img_cv = cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
     return img_cv
 
+
+def increment_path(base_path):
+    """
+        根据文件夹中已有的文件名，自动获得新路径或文件名
+        Increment file or directory path, i.e. runs/exp --> runs/exp{sep}2, runs/exp{sep}3, ... etc.
+        使用pathlib处理文件
+    """
+    base_path = Path(base_path)
+    # 如果根文件夹已经存在,则不再重新创建
+    if base_path.exists():
+
+        dirs = glob.glob(f'{base_path}*')
+        matches = [re.search(rf'%s(\d+)' % base_path.stem, d) for d in dirs]
+
+        # groups对应re匹配到的内容
+        i = [int(m.groups()[0]) for m in matches if m]
+
+        n = max(i) + 1 if i else 2
+        base_path = Path(f'{base_path}{n}')
+
+    base_path.mkdir(parents=True, exist_ok=True)
+
+    return base_path
+
+
+def plot_results(results_file, save_dir):
+    from matplotlib.ticker import MaxNLocator
+
+    result_dict = {'mean IoU': [], 'train_loss': [], 'lr': []}
+    with open(results_file, 'r') as f:
+        for i in f.readlines():
+            s_ = i.strip().split(': ')
+            if len(s_) > 1:
+                n = s_[0]
+                if n in result_dict.keys():
+                    v = float(s_[1])
+                    result_dict[n].append(v)
+
+    plt.figure(dpi=200, figsize=(10, 5))
+
+    for idx, (key, value) in enumerate(result_dict.items()):
+
+        x = range(len(value))
+        y = value
+        plt.subplot(1, 3, idx + 1)
+        plt.title(key, fontsize=12)
+        plt.plot(x, y, marker='.', linewidth=2, markersize=8)
+        plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+        plt.tight_layout()
+
+    plt.savefig(Path(save_dir) / 'results.png')
+
 if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
-    print_env_info(device)
-    from PIL import Image
-    path = r'/home/wg/PythonProject/PycharmProjects/medicine/dataset/1-422/segHeart/val/mask/(24).png'
-    target = Image.open(path)
-    target = PILtoCV2(target)
-    if target.ndim == 2:
-        print(np.unique(target))
-    elif target.ndim == 3:
-        print(np.unique(target.reshape(-1, target.shape[-1]), axis=0))
+    # test print_env_info
+    # print_env_info(device)
+
+    # test increment_path
+    # base_path = Path('runs/train/exp')
+
+    # test increment_path
+    # save_dir = increment_path(base_path)
+
+    # test plot_results
+    results_path = r'/home/wg/下载/segmentation/runs/train/exp5/results20230203-160025.txt'
+    plot_results(results_path, save_dir='./')
 

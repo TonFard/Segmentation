@@ -1,13 +1,14 @@
 import os
 import time
+from pathlib import Path
 import datetime
 import logging
 
 import torch
 
-from model import lraspp_mobilenetv3_large
+from model import lraspp_mobilenetv3_large, Unet, deeplabv3_resnet50
 from utils import train_one_epoch, evaluate, create_lr_scheduler, criterion,\
-    print_env_info
+    print_env_info, increment_path, plot_results
 from my_dataset import MyDataset
 import transforms as T
 
@@ -73,6 +74,16 @@ def create_model(num_classes, pretrain=False):
 
 def main(args):
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
+    base_path = Path('runs/train/exp')
+    save_dir = increment_path(base_path=base_path)
+    wdir = save_dir / 'weights'
+    wdir.mkdir(parents=True, exist_ok=True)
+    last = wdir / 'last.pt'
+    best = wdir / 'best.pt'
+    results_file = save_dir / 'results{}.txt'.format(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+
+
     device = torch.device('cuda:0' if torch.cuda.is_available() and args.device == 'cuda' else "cpu")
     print_env_info(device)
 
@@ -81,7 +92,7 @@ def main(args):
     num_classes = args.num_classes + 1
 
     # 用来保存训练以及验证过程中信息
-    results_file = "results{}.txt".format(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+
 
     # VOCdevkit -> VOC2012 -> ImageSets -> Segmentation -> train.txt
     train_dataset = MyDataset(True, args.data_path, transforms=get_transform(train=True))
@@ -117,13 +128,13 @@ def main(args):
     model = create_model(num_classes=num_classes)
     model.to(device)
 
-    params_to_optimize = [
-        {"params": [p for p in model.backbone.parameters() if p.requires_grad]},
-        {"params": [p for p in model.classifier.parameters() if p.requires_grad]}
-    ]
+    # params_to_optimize = [
+    #     {"params": [p for p in model.backbone.parameters() if p.requires_grad]},
+    #     {"params": [p for p in model.classifier.parameters() if p.requires_grad]}
+    # ]
 
     optimizer = torch.optim.SGD(
-        params_to_optimize,
+        model.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay
     )
 
@@ -142,16 +153,18 @@ def main(args):
             scaler.load_state_dict(checkpoint["scaler"])
 
     start_time = time.time()
-
+    loss_list = []
+    miou_list = []
+    best_miou = 0.0
     for epoch in range(args.start_epoch, args.epochs):
 
         mean_loss, lr = train_one_epoch(model, criterion, optimizer, train_loader, device=device, epoch=epoch,
                                         lr_scheduler=lr_scheduler, scaler=scaler, epochs=args.epochs)
 
         confmat = evaluate(model, val_loader, device=device, num_classes=num_classes)
-
         val_info = str(confmat)
         print(val_info)
+
         # write into txt
         with open(results_file, "a") as f:
             # 记录每个epoch对应的train_loss、lr以及验证集各指标
@@ -167,12 +180,20 @@ def main(args):
                      "args": args}
         if args.amp:
             save_file["scaler"] = scaler.state_dict()
-        torch.save(save_file, "save_weights/model_{}.pth".format(epoch))
+
+        miou = float(val_info.split('\n')[-1].split(' ')[-1])
+        if best_miou < miou:
+            best_miou = miou
+            torch.save(save_file, best)
+        torch.save(save_file, last)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("training time {}".format(total_time_str))
 
+    # 绘制结果
+    plot_results(results_file, save_dir)
+    logging.info('weights and results save in {}'.format(save_dir))
 
 def parse_args():
     import argparse
@@ -182,7 +203,7 @@ def parse_args():
     parser.add_argument("--num-classes", default=4, type=int)
     parser.add_argument("--device", default="cuda", help="training device")
     parser.add_argument("-b", "--batch-size", default=4, type=int)
-    parser.add_argument("--epochs", default=30, type=int, metavar="N",
+    parser.add_argument("--epochs", default=3, type=int, metavar="N",
                         help="number of total epochs to train")
 
     parser.add_argument('--lr', default=0.0001, type=float, help='initial learning rate')
