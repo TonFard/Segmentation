@@ -12,8 +12,8 @@ def run(args):
 
     target, pred, num_classes = args.target, args.pred, args.num_classes
     target, pred = Path(target), Path(pred)
-    targets = []
-    preds = []
+    targets = []  # 用于存放target，target为array
+    preds = []    # 用于存放pred，pred为array
     if target.is_file():
         assert pred.is_file(), f'pred need a image'
         mask_t = cv2.imread(str(target))
@@ -21,21 +21,29 @@ def run(args):
         targets = [mask_t]
         preds = [mask_p]
 
+    names = None   # 图片名称
     if target.is_dir():
         assert pred.is_dir(), f'pred need a dir'
         names = os.listdir(str(target))
         for i in names:
-            mask_t_t = os.path.join(str(target), i)
-            mask_t_p = os.path.join(str(pred), i)
-            mask_t = cv2.imread(mask_t_t)
-            mask_p = cv2.imread(mask_t_p)
+            # target_mask_path
+            mask_t_p = os.path.join(str(target), i)
+            # pred_mask_path
+            mask_p_p = os.path.join(str(pred), i)
+            # target_mask
+            mask_t = cv2.imread(mask_t_p)
+            # pred_mask
+            mask_p = cv2.imread(mask_p_p)
             targets.append(mask_t)
             preds.append(mask_p)
 
+    # 用于存放所有图片的结果
     scoresMat = pd.DataFrame(columns=['img_name', 'IoU/Jaccard', 'Dice', 'Accuracy', 'Sensitivity', 'Precision', 'Fmeasure', 'MCC'])
 
     for idx, (t, p) in enumerate(zip(targets, preds)):
-        scoresMat = scoresMat.append(get_image_score(t, p, num_classes + 1, names[idx]))
+        scoreMat = get_image_score(t, p, num_classes + 1)
+        scoreMat.assign(img_name=names[idx])   # 增加img_name列名
+        scoresMat = scoresMat.append(scoreMat)
     scoresMat.to_csv(save_dir / 'result.csv')
 
 

@@ -118,7 +118,9 @@ def EvaluateImageSegmentationScores(target, pred, num_classes):
         return np.array([IOU, Dice, Accuracy, Sensitivity, Precision, Fmeasure, MCC])
 
     scores = []
+    # 分别计算每一类的分数
     for i in range(1, num_classes):
+        # 把不是这一类的赋值为0，不是这一类的赋值为1
         target[target != i] = 0
         target[target == i] = 1
         pred[pred != i] = 0
@@ -126,19 +128,21 @@ def EvaluateImageSegmentationScores(target, pred, num_classes):
         result = f(target, pred)
         result = np.nan_to_num(result)
         scores.append({'class{}'.format(i): result})
+        target = target.clone().cpu().numpy()
+        pred = pred.clone().cpu().numpy()
     scores = np.array(scores).reshape(num_classes - 1, -1)
     return scores
 
 
 def get_image_score(target, pred, num_classes):
-    scoresMat = pd.DataFrame(columns=['IOU', 'Dice', 'Accuracy', 'Sensitivity', 'Precision', 'Fmeasure', 'MCC'])
+    scoresMat = pd.DataFrame(columns=['IoU/Jaccard', 'Dice', 'Accuracy', 'Sensitivity', 'Precision', 'Fmeasure', 'MCC'])
     cls_scores = np.zeros((num_classes - 1, 7))
     scores = EvaluateImageSegmentationScores(target, pred.argmax(1), num_classes)
     for i in range(num_classes - 1):
         cls_scores[i] += scores[i][0]['class{}'.format(i + 1)]
 
     per_img_score = pd.DataFrame(cls_scores, index=['class{}'.format(i) for i in range(1, num_classes)],
-                                 columns=['IOU', 'Dice', 'Accuracy', 'Sensitivity', 'Precision', 'Fmeasure', 'MCC'])
+                                 columns=['IoU/Jaccard', 'Dice', 'Accuracy', 'Sensitivity', 'Precision', 'Fmeasure', 'MCC'])
 
     for i in range(num_classes - 1):
         scoresMat = scoresMat.append(per_img_score.iloc[i, ...])
