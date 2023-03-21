@@ -6,6 +6,7 @@ from torchvision import transforms as T
 from torchvision.transforms import functional as F
 
 
+# 如果图像最小边长小于给定size，则用数值fill进行padding。
 def pad_if_smaller(img, size, fill=0):
     # 如果图像最小边长小于给定size，则用数值fill进行padding
     min_size = min(img.size)
@@ -17,6 +18,7 @@ def pad_if_smaller(img, size, fill=0):
     return img
 
 
+# 用于将多个数据增强操作组合起来。
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
@@ -27,6 +29,7 @@ class Compose(object):
         return image, target
 
 
+# 用于将图像随机缩放到min_size到max_size之间的大小。
 class RandomResize(object):
     def __init__(self, min_size, max_size=None):
         self.min_size = min_size
@@ -43,7 +46,7 @@ class RandomResize(object):
         target = F.resize(target, size, interpolation=T.InterpolationMode.NEAREST)
         return image, target
 
-
+# 用于随机水平翻转图像。
 class RandomHorizontalFlip(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
@@ -55,6 +58,7 @@ class RandomHorizontalFlip(object):
         return image, target
 
 
+# 用于随机裁剪图像。
 class RandomCrop(object):
     def __init__(self, size):
         self.size = size
@@ -67,7 +71,7 @@ class RandomCrop(object):
         target = F.crop(target, *crop_params)
         return image, target
 
-
+# 用于对图像进行居中裁
 class CenterCrop(object):
     def __init__(self, size):
         self.size = size
@@ -78,6 +82,7 @@ class CenterCrop(object):
         return image, target
 
 
+# 将输入的图像转换为张量
 class ToTensor(object):
     def __call__(self, image, target):
         image = F.to_tensor(image)
@@ -85,6 +90,7 @@ class ToTensor(object):
         return image, target
 
 
+# 将输入的图像进行归一化处理
 class Normalize(object):
     def __init__(self, mean, std):
         self.mean = mean
@@ -93,4 +99,3 @@ class Normalize(object):
     def __call__(self, image, target):
         image = F.normalize(image, mean=self.mean, std=self.std)
         return image, target
-    
