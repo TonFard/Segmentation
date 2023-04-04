@@ -1,6 +1,7 @@
 import glob
 import logging
 import re
+import os
 from pathlib import Path
 import platform
 
@@ -92,19 +93,22 @@ def criterion(inputs, target):
     return losses["out"] + 0.5 * losses["aux"]
 
 
-def EvaluateImageSegmentationScores(target, pred, num_classes):
-
-    target = target.clone().cpu().numpy()
-    pred = pred.clone().cpu().numpy()
+def EvaluateImageSegmentationScores(target, pred, num_classes: int):
+    Target = target.copy().astype(np.int8)
+    Pred = pred.copy().astype(np.int8)
 
     def f(X, Y):
+        X = X.astype(np.int8)
+        Y = Y.astype(np.int8)
         assert X.shape == Y.shape, 'image shape not matching'
         sumindex = X + Y
-        TP = np.sum(sumindex == 2)
-        TN = np.sum(sumindex == 0)
+        TP = np.sum(sumindex == 2) / 1000
+        TN = np.sum(sumindex == 0) / 1000
+
         substractindex = X - Y
-        FP = np.sum(substractindex == -1)
-        FN = np.sum(substractindex == 1)
+
+        FP = np.sum(substractindex == -1) / 1000
+        FN = np.sum(substractindex == 1) / 1000
         Accuracy = (TP + TN) / (FN + FP + TP + TN)
         Sensitivity = TP / (TP + FN)
         Precision = TP / (TP + FP)
@@ -118,18 +122,18 @@ def EvaluateImageSegmentationScores(target, pred, num_classes):
         return np.array([IOU, Dice, Accuracy, Sensitivity, Precision, Fmeasure, MCC])
 
     scores = []
-    # 分别计算每一类的分数
+    # 计算每一类的分数
     for i in range(1, num_classes):
-        # 把不是这一类的赋值为0，不是这一类的赋值为1
-        target[target != i] = 0
-        target[target == i] = 1
-        pred[pred != i] = 0
-        pred[pred == i] = 1
-        result = f(target, pred)
+        # 不等于这一类的赋0，等于的值赋1
+        Target[Target != i] = 0
+        Target[Target == i] = 1
+        Pred[Pred != i] = 0
+        Pred[Pred == i] = 1
+        result = f(Target, Pred)
         result = np.nan_to_num(result)
         scores.append({'class{}'.format(i): result})
-        target = target.clone().cpu().numpy()
-        pred = pred.clone().cpu().numpy()
+        Target = target.copy()
+        Pred = pred.copy()
     scores = np.array(scores).reshape(num_classes - 1, -1)
     return scores
 
@@ -137,7 +141,7 @@ def EvaluateImageSegmentationScores(target, pred, num_classes):
 def get_image_score(target, pred, num_classes):
     scoresMat = pd.DataFrame(columns=['IoU/Jaccard', 'Dice', 'Accuracy', 'Sensitivity', 'Precision', 'Fmeasure', 'MCC'])
     cls_scores = np.zeros((num_classes - 1, 7))
-    scores = EvaluateImageSegmentationScores(target, pred.argmax(1), num_classes)
+    scores = EvaluateImageSegmentationScores(target, pred, num_classes)
     for i in range(num_classes - 1):
         cls_scores[i] += scores[i][0]['class{}'.format(i + 1)]
 
@@ -269,6 +273,19 @@ def plot_results(results_file, save_dir):
         plt.tight_layout()
 
     plt.savefig(Path(save_dir) / 'results.png')
+
+
+def png2img(src, dst):
+    # 获取源文件夹中所有PNG图像文件的路径
+    png_files = [os.path.join(src, f) for f in os.listdir(src) if f.endswith('.png')]
+    # 批量将PNG图像转换为JPEG图像
+    for png_file in png_files:
+        # 打开PNG图像并转换为RGB模式
+        png_img = Image.open(png_file).convert('RGB')
+        # 生成JPEG文件的路径和文件名
+        jpg_file = os.path.join(dst, os.path.splitext(os.path.basename(png_file))[0] + '.jpg')
+        # 保存JPEG图像
+        png_img.save(jpg_file)
 
 if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
